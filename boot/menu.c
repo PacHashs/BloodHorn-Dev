@@ -315,7 +315,7 @@ PrintXY(
     // Using only intensity and basic colors (not true RGB)
     UINT8 fg = EFI_LIGHTGRAY;
     UINT8 bg = EFI_BLACK;
-    // You can improve color mapping here if needed
+    // You can improve color mapping here if needed 
     
     gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(fg, bg));
     

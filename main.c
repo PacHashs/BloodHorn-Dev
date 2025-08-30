@@ -34,6 +34,7 @@
 #include "config/config_ini.h"
 #include "config/config_json.h"
 #include "config/config_env.h"
+#include "boot/libb/include/bloodhorn/bloodhorn.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -218,6 +219,49 @@ EFI_STATUS EFIAPI UefiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *Syste
     gST->ConOut->Reset(gST->ConOut, FALSE);
     gST->ConOut->SetMode(gST->ConOut, 0);
     gST->ConOut->ClearScreen(gST->ConOut);
+
+    // Initialize BloodHorn library with UEFI system table integration
+    bh_system_table_t bloodhorn_system_table = {
+        // Memory management (use UEFI services)
+        .alloc = (void* (*)(bh_size_t))AllocatePool,
+        .free = (void (*)(void*))FreePool,
+        
+        // Console output (redirect to UEFI console)
+        .putc = NULL,  // Will use default implementation
+        .puts = NULL,  // Will use default implementation  
+        .printf = NULL, // Will use default implementation
+        
+        // Memory map (use UEFI memory services)
+        .get_memory_map = NULL, // TODO: Implement UEFI memory map wrapper
+        
+        // Graphics (use UEFI Graphics Output Protocol)
+        .get_graphics_info = NULL, // TODO: Implement GOP wrapper
+        
+        // ACPI and firmware tables
+        .get_rsdp = NULL, // TODO: Implement UEFI table lookup
+        .get_boot_device = NULL, // TODO: Implement device path wrapper
+        
+        // Power management (use UEFI runtime services)
+        .reboot = NULL,   // TODO: Implement UEFI reset wrapper
+        .shutdown = NULL, // TODO: Implement UEFI shutdown wrapper
+        
+        // Debugging
+        .debug_break = NULL // Will use default implementation
+    };
+    
+    // Initialize the BloodHorn library
+    bh_status_t bh_status = bh_initialize(&bloodhorn_system_table);
+    if (bh_status != BH_SUCCESS) {
+        Print(L"Warning: BloodHorn library initialization failed: %a\n", bh_status_to_string(bh_status));
+        // Continue anyway - the bootloader can work without the library
+    } else {
+        Print(L"BloodHorn library initialized successfully\n");
+        
+        // Print version information
+        uint32_t major, minor, patch;
+        bh_get_version(&major, &minor, &patch);
+        Print(L"BloodHorn Library v%d.%d.%d\n", major, minor, patch);
+    }
 
     LoadThemeAndLanguageFromConfig();
     InitMouse();

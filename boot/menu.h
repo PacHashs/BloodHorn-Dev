@@ -14,7 +14,7 @@
 EFI_STATUS EFIAPI
 AddBootEntry(
     IN CONST CHAR16 *Name,
-    IN EFI_STATUS (EFIAPI *BootFunction)(VOID)
+    IN EFI_STATUS (*BootFunction)(VOID)
 );
 
 // Function to display and handle the boot menu
