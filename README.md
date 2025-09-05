@@ -2,6 +2,13 @@
 
 A bootloader supporting multiple architectures and boot protocols.
 
+## Support Me
+
+If you like this project and want to support me, you can donate through [Liberapay](https://liberapay.com/Listedroot/donate).
+
+[![Donate using Liberapay](https://liberapay.com/assets/widgets/donate.svg)](https://liberapay.com/Listedroot/donate)
+
+
 ## Features
 - Architectures: x86_64, ARM64, RISC-V, LoongArch
 - Boot protocols: Linux, Multiboot 1/2, Limine, PXE, Chainloading
