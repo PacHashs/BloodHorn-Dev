@@ -4,6 +4,17 @@ org 0x7E00
 
 %define BCBP_MAGIC 0x424C4348  ; 'BLCH'
 %define BCBP_VERSION 0x00010000
+%define bcbp_header_size 144
+
+; Module type constants
+%define BCBP_MODTYPE_KERNEL   0x01
+%define BCBP_MODTYPE_INITRD   0x02
+%define BCBP_MODTYPE_ACPI     0x03
+%define BCBP_MODTYPE_SMBIOS   0x04
+%define BCBP_MODTYPE_DEVICETREE 0x05
+%define BCBP_MODTYPE_EFI      0x06
+%define BCBP_MODTYPE_CONFIG   0x07
+%define BCBP_MODTYPE_DRIVER   0x08
 
 struc bcbp_header
     .magic:         resd 1
@@ -119,7 +130,7 @@ protected_mode:
 
     mov dword [0x10000 + bcbp_header.magic], BCBP_MAGIC
     mov dword [0x10000 + bcbp_header.version], BCBP_VERSION
-    mov dword [0x10000 + bcbp_header.entry_point], 0x100000  ; Kernel entry point
+    mov qword [0x10000 + bcbp_header.entry_point], 0x100000  ; Kernel entry point (64-bit as per spec)
     mov qword [0x10000 + bcbp_header.modules], 0x10100       ; Modules start after header
     mov byte [0x10000 + bcbp_header.secure_boot], 0
     mov byte [0x10000 + bcbp_header.tpm_available], 0
@@ -127,18 +138,17 @@ protected_mode:
 
     ; Set up kernel module
     mov edi, 0x10100
-    mov dword [edi + bcbp_module.start], 0x100000  ; Kernel loaded at 1MB
-    mov dword [edi + bcbp_module.size], 0x10000    ; 64KB kernel
-    mov dword [edi + bcbp_module.cmdline], cmdline_kernel
-    mov dword [edi + bcbp_module.name], str_kernel
-    mov byte [edi + bcbp_module.type], 0x01        ; Kernel type
+    mov qword [edi + bcbp_module.start], 0x100000  ; Kernel loaded at 1MB (64-bit as per spec)
+    mov qword [edi + bcbp_module.size], 0x10000    ; 64KB kernel (64-bit as per spec)
+    mov qword [edi + bcbp_module.cmdline], cmdline_kernel  ; Command line pointer (64-bit as per spec)
+    mov qword [edi + bcbp_module.name], str_kernel        ; Module name pointer (64-bit as per spec)
+    mov byte [edi + bcbp_module.type], BCBP_MODTYPE_KERNEL ; Kernel type
 
     ; Set module count to 1 (just the kernel for now)
     mov dword [0x10000 + bcbp_header.module_count], 1
 
     ; Jump to kernel
-    mov eax, 0x10000
-    jmp [eax + bcbp_header.entry_point]
+    jmp [0x10000 + bcbp_header.entry_point]
 
 disk_error:
     mov si, msg_disk_error
