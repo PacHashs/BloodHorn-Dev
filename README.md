@@ -35,6 +35,18 @@ If you like this project and want to support me, you can donate through [Liberap
 
 ## Documentation
 See docs/ and other markdowns for detailed information on protocols and APIs.
+
+## FAQ
+
+### What is the size of BloodHorn?
+BloodHorn source code is approximately 500 KB before compilation. After building, the bootloader binary ranges from 1.5 to 2 MB depending on enabled features and architecture.
+
+### How do I contribute to BloodHorn?
+Contributions are welcome! Please see our contribution guidelines in the docs/ directory and feel free to open issues or submit pull requests on our Codeberg repository.
+
+### Does BloodHorn support Secure Boot?
+Yes, BloodHorn includes comprehensive Secure Boot support with TPM 2.0 integration and cryptographic verification of all loaded modules.
+
 ## Contributors
 
 - **[PacHash](https://github.com/PacHashs)** - Lead Developer
