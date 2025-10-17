@@ -1,10 +1,10 @@
-// SoftwaresForAll Native CI configuration for C written projects
+# SoftwaresForAll Native CI configuration for C written projects
 pipeline:
   setup:
     image: ubuntu:24.04
     commands:
       - apt update -y
-      - apt install -y git wget curl unzip python3 python3-pip build-essential cmake ninja-build
+      - apt install -y git wget unzip python3 build-essential cmake ninja-build
       - wget https://github.com/github/codeql-cli-binaries/releases/latest/download/codeql-linux64.zip
       - unzip codeql-linux64.zip -d /opt
       - echo "export PATH=/opt/codeql:$PATH" >> ~/.bashrc
@@ -14,7 +14,8 @@ pipeline:
   build:
     image: gcc:14
     commands:
-      - mkdir -p build && cd build
+      - mkdir -p build
+      - cd build
       - cmake .. -DCMAKE_BUILD_TYPE=Release
       - cmake --build . --parallel $(nproc)
       - cd ..
@@ -23,7 +24,7 @@ pipeline:
     image: ubuntu:24.04
     commands:
       - apt update -y
-      - apt install -y unzip python3
+      - apt install -y unzip python3 build-essential cmake
       - wget https://github.com/github/codeql-cli-binaries/releases/latest/download/codeql-linux64.zip
       - unzip codeql-linux64.zip -d /opt
       - export PATH="/opt/codeql:$PATH"
