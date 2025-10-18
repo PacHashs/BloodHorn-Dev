@@ -166,7 +166,36 @@ LoadBootConfig (
     AsciiStrCpyS(config->language, sizeof(config->language), "en");
     config->enable_networking = FALSE;
 
-    // Load from configuration files (simplified)
+    // Attempt to load from config.ini
+    struct boot_menu_entry entries[32];
+    int count = parse_ini("config.ini", entries, 32);
+    if (count > 0) {
+        Print(L"Loaded %d entries from config.ini\n", count);
+        for (int i = 0; i < count; i++) {
+            if (AsciiStrCmp(entries[i].name, "default_entry") == 0) {
+                AsciiStrCpyS(config->default_entry, sizeof(config->default_entry), entries[i].path);
+            } else if (AsciiStrCmp(entries[i].name, "menu_timeout") == 0) {
+                config->menu_timeout = AsciiStrDecimalToUintn(entries[i].path);
+            } else if (AsciiStrCmp(entries[i].name, "tpm_enabled") == 0) {
+                config->tpm_enabled = (AsciiStrCmp(entries[i].path, "true") == 0);
+            } else if (AsciiStrCmp(entries[i].name, "secure_boot") == 0) {
+                config->secure_boot = (AsciiStrCmp(entries[i].path, "true") == 0);
+            } else if (AsciiStrCmp(entries[i].name, "use_gui") == 0) {
+                config->use_gui = (AsciiStrCmp(entries[i].path, "true") == 0);
+            } else if (AsciiStrCmp(entries[i].name, "font_path") == 0) {
+                AsciiStrCpyS(config->font_path, sizeof(config->font_path), entries[i].path);
+            } else if (AsciiStrCmp(entries[i].name, "font_size") == 0) {
+                config->font_size = AsciiStrDecimalToUintn(entries[i].path);
+            } else if (AsciiStrCmp(entries[i].name, "header_font_size") == 0) {
+                config->header_font_size = AsciiStrDecimalToUintn(entries[i].path);
+            } else if (AsciiStrCmp(entries[i].name, "language") == 0) {
+                AsciiStrCpyS(config->language, sizeof(config->language), entries[i].path);
+            } else if (AsciiStrCmp(entries[i].name, "enable_networking") == 0) {
+                config->enable_networking = (AsciiStrCmp(entries[i].path, "true") == 0);
+            }
+        }
+    }
+
     return EFI_SUCCESS;
 }
 
@@ -257,26 +286,26 @@ UefiMain (
         .free = (void (*)(void*))FreePool,
 
         // Console output (redirect to UEFI console)
-        .putc = NULL,
-        .puts = NULL,
-        .printf = NULL,
+        .putc = bh_uefi_putc,
+        .puts = bh_uefi_puts,
+        .printf = (void (*)(const char*, ...))Print,
 
         // Memory map (use UEFI memory services or Coreboot if available)
-        .get_memory_map = NULL,
+        .get_memory_map = (bh_status_t (*)(bh_memory_map_t*))gBS->GetMemoryMap,
 
         // Graphics (use UEFI Graphics Output Protocol or Coreboot framebuffer)
-        .get_graphics_info = NULL,
+        .get_graphics_info = NULL, // Graphics are handled outside libb
 
         // ACPI and firmware tables (use UEFI or Coreboot tables)
-        .get_rsdp = NULL,
-        .get_boot_device = NULL,
+        .get_rsdp = (void* (*)(void))GetRsdp,
+        .get_boot_device = NULL, // Platform specific
 
         // Power management (use UEFI runtime services)
-        .reboot = NULL,
-        .shutdown = NULL,
+        .reboot = bh_uefi_reboot,
+        .shutdown = bh_uefi_shutdown,
 
         // Debugging
-        .debug_break = NULL
+        .debug_break = bh_uefi_debug_break
     };
 
     // Initialize the BloodHorn library
@@ -335,6 +364,34 @@ UefiMain (
     }
 
     return EFI_DEVICE_ERROR;
+}
+
+// Helper function to convert UEFI putc to bh_putc
+static void bh_uefi_putc(char c) {
+    CHAR16 C[2] = {c, 0};
+    gST->ConOut->OutputString(gST->ConOut, C);
+}
+
+// Helper function to convert UEFI puts to bh_puts
+static void bh_uefi_puts(const char* s) {
+    while (*s) {
+        bh_uefi_putc(*s++);
+    }
+}
+
+// Helper function for UEFI reboot
+static void bh_uefi_reboot(void) {
+    gRT->ResetSystem(EfiResetWarm, EFI_SUCCESS, 0, NULL);
+}
+
+// Helper function for UEFI shutdown
+static void bh_uefi_shutdown(void) {
+    gRT->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL);
+}
+
+// Helper function for debug break
+static void bh_uefi_debug_break(void) {
+    __asm__ volatile("int $3");
 }
 
 // Boot wrapper implementations
