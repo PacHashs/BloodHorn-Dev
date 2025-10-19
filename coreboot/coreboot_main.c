@@ -5,12 +5,14 @@
  * when running as a Coreboot payload with UEFI compatibility.
  */
 
-#include <Uefi.h>
-#include <Library/UefiLib.h>
+#include <Library/PrintLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/MemoryAllocationLib.h>
+#include <Library/BaseLib.h>
+#include <Guid/Acpi.h>
+#include <stdarg.h>
 #include <Protocol/SimpleFileSystem.h>
 #include <Protocol/LoadedImage.h>
 #include <Guid/FileInfo.h>
@@ -54,7 +56,7 @@ CorebootMain (
 {
     EFI_STATUS Status;
 
-    // Initialize UEFI system table (required for EDK2 compatibility)
+    // Initialize UEFI system table (required for EDK2 compatibility btw)
     Status = EfiGetSystemConfigurationTable(&gEfiSystemTableGuid, (VOID**)&gST);
     if (EFI_ERROR(Status)) {
         // Fallback: assume we're running in a minimal environment
@@ -116,16 +118,16 @@ BloodhornMainCoreboot (
         bh_system_table_t bloodhorn_system_table = {
             .alloc = (void* (*)(bh_size_t))AllocatePool,
             .free = (void (*)(void*))FreePool,
-            .putc = NULL,
-            .puts = NULL,
-            .printf = NULL,
-            .get_memory_map = NULL,
-            .get_graphics_info = NULL,
-            .get_rsdp = NULL,
-            .get_boot_device = NULL,
-            .reboot = NULL,
-            .shutdown = NULL,
-            .debug_break = NULL
+            .putc = (void (*)(char))bh_putc,
+            .puts = (void (*)(const char*))bh_puts,
+            .printf = (void (*)(const char*, ...))bh_printf,
+            .get_memory_map = (bh_status_t (*)(bh_memory_descriptor_t**, bh_size_t*, bh_size_t*))bh_get_memory_map,
+            .get_graphics_info = (bh_status_t (*)(bh_graphics_info_t*))bh_get_graphics_info,
+            .get_rsdp = (void* (*)(void))bh_get_rsdp,
+            .get_boot_device = (void* (*)(void))bh_get_boot_device,
+            .reboot = (void (*)(void))bh_reboot,
+            .shutdown = (void (*)(void))bh_shutdown,
+            .debug_break = (void (*)(void))bh_debug_break
         };
 
         bh_status_t bh_status = bh_initialize(&bloodhorn_system_table);
@@ -480,10 +482,113 @@ BootRecoveryShellWrapper(VOID) {
     return shell_start();
 }
 
-EFI_STATUS
-EFIAPI
-ExitToCorebootWrapper(VOID) {
-    Print(L"Exiting to Coreboot firmware...\n");
-    CorebootReboot();
-    return EFI_SUCCESS;
+STATIC VOID bh_putc(CHAR8 c) {
+    if (gST && gST->ConOut) {
+        CHAR16 wbuf[2] = { (CHAR16)c, 0 };
+        gST->ConOut->OutputString(gST->ConOut, wbuf);
+    }
+}
+
+STATIC VOID bh_puts(const CHAR8* str) {
+    if (gST && gST->ConOut && str) {
+        CHAR16 wbuf[512];
+        UINTN i = 0;
+        while (*str && i < 511) {
+            wbuf[i++] = (CHAR16)*str++;
+        }
+        wbuf[i] = 0;
+        gST->ConOut->OutputString(gST->ConOut, wbuf);
+        gST->ConOut->OutputString(gST->ConOut, L"\n");
+    }
+}
+
+STATIC VOID bh_printf(const CHAR8* format, ...) {
+    VA_LIST args;
+    VA_START(args, format);
+    if (gST && gST->ConOut) {
+        CHAR16 wbuf[512];
+        AsciiVSPrintUnicodeFormat(wbuf, sizeof(wbuf), (CHAR8*)format, args);
+        gST->ConOut->OutputString(gST->ConOut, wbuf);
+    }
+    VA_END(args);
+}
+
+STATIC bh_status_t bh_get_memory_map(bh_memory_descriptor_t** map, bh_size_t* map_size, bh_size_t* descriptor_size) {
+    if (!gBS) return BH_ERROR;
+
+    UINTN MemoryMapSize = 0;
+    EFI_MEMORY_DESCRIPTOR* MemoryMap = NULL;
+    UINTN MapKey = 0;
+    UINTN DescriptorSize = 0;
+    UINT32 DescriptorVersion = 0;
+
+    EFI_STATUS Status = gBS->GetMemoryMap(&MemoryMapSize, MemoryMap, &MapKey, &DescriptorSize, &DescriptorVersion);
+    if (Status == EFI_BUFFER_TOO_SMALL) {
+        Status = gBS->AllocatePool(EfiBootServicesData, MemoryMapSize, (VOID**)&MemoryMap);
+        if (EFI_ERROR(Status)) return BH_OUT_OF_MEMORY;
+
+        Status = gBS->GetMemoryMap(&MemoryMapSize, MemoryMap, &MapKey, &DescriptorSize, &DescriptorVersion);
+    }
+
+    if (EFI_ERROR(Status)) return BH_ERROR;
+
+    *map = (bh_memory_descriptor_t*)MemoryMap;
+    *map_size = MemoryMapSize;
+    *descriptor_size = DescriptorSize;
+    return BH_SUCCESS;
+}
+
+STATIC bh_status_t bh_get_graphics_info(bh_graphics_info_t* info) {
+    if (!info) return BH_INVALID_ARGUMENT;
+
+    if (CorebootGetFramebuffer()) {
+        CONST COREBOOT_FB* fb = CorebootGetFramebuffer();
+        info->framebuffer = (void*)fb->physical_address;
+        info->width = fb->x_resolution;
+        info->height = fb->y_resolution;
+        info->bpp = fb->bits_per_pixel;
+        return BH_SUCCESS;
+    }
+
+    return BH_NOT_FOUND;
+}
+
+STATIC VOID* bh_get_rsdp(VOID) {
+    EFI_CONFIGURATION_TABLE* ConfigTable = gST->ConfigurationTable;
+    EFI_GUID AcpiTableGuid = ACPI_TABLE_GUID;
+
+    for (UINTN i = 0; i < gST->NumberOfTableEntries; i++) {
+        if (CompareGuid(&ConfigTable[i].VendorGuid, &AcpiTableGuid)) {
+            return ConfigTable[i].VendorTable;
+        }
+    }
+    return NULL;
+}
+
+STATIC VOID* bh_get_boot_device(VOID) {
+    if (!gBS || !gImageHandle) return NULL;
+
+    EFI_LOADED_IMAGE_PROTOCOL* LoadedImage;
+    EFI_STATUS Status = gBS->HandleProtocol(gImageHandle, &gEfiLoadedImageProtocolGuid, (VOID**)&LoadedImage);
+    if (EFI_ERROR(Status)) return NULL;
+
+    return LoadedImage->DeviceHandle;
+}
+
+STATIC VOID bh_reboot(VOID) {
+    if (gRT && gRT->ResetSystem) {
+        gRT->ResetSystem(EfiResetCold, EFI_SUCCESS, 0, NULL);
+    }
+}
+
+STATIC VOID bh_shutdown(VOID) {
+    if (gRT && gRT->ResetSystem) {
+        gRT->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL);
+    }
+}
+
+STATIC VOID bh_debug_break(VOID) {
+    if (gBS) {
+        gBS->Stall(1000000); // 1 second stall for debugging
+    }
 }
