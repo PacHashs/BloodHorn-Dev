@@ -1,69 +1,35 @@
-# BloodHorn Coreboot Integration Documentation
+# BloodHorn Coreboot Integration
 
 ## Overview
 
-BloodHorn bootloader has been enhanced with Coreboot firmware platform integration, providing a more flexible and lightweight boot environment compared to traditional UEFI/EDK2 firmware.
+BloodHorn bootloader supports integration with Coreboot firmware, providing an alternative to traditional UEFI firmware. This integration allows BloodHorn to leverage Coreboot's direct hardware control while maintaining UEFI compatibility for broader system support.
 
-## Why Coreboot Integration?
+## Coreboot Integration Benefits
 
-**Even though EDK2/UEFI was "sufficient", BloodHorn added Coreboot support for fundamental reasons:**
+### Hardware Control
+- **Direct Hardware Access**: Coreboot provides more direct control over hardware initialization compared to UEFI abstraction layers
+- **Reduced Complexity**: Eliminates some UEFI overhead in the boot chain
+- **Better Understanding**: Educational value for understanding low-level hardware initialization
 
-### **1. Hardware Control Philosophy**
-- **EDK2 Limitation**: UEFI is an abstraction layer that adds complexity between the bootloader and hardware
-- **Coreboot Advantage**: Direct hardware initialization provides better control and understanding of the boot process
-- **Educational Value**: Understanding low-level hardware initialization is essential for bootloader development
+### Performance Improvements
+- **Faster Initialization**: Coreboot can provide faster hardware detection and setup
+- **Reduced Memory Usage**: Smaller firmware footprint may leave more RAM available
+- **Efficient Resource Management**: More direct memory mapping capabilities
 
-### **2. Performance Benefits**
-- **Faster Boot Times**: Coreboot eliminates UEFI overhead during early boot stages
-- **Reduced Memory Usage**: Smaller firmware footprint leaves more RAM for the OS
-- **Better Hardware Utilization**: Direct hardware control enables optimized initialization
+### Flexibility
+- **Source Code Access**: Coreboot's open-source nature allows for customization
+- **Mainboard Optimization**: Can be tailored for specific hardware configurations
+- **Research Platform**: Enables experimentation with boot technologies
 
-### **3. Flexibility and Customization**
-- **EDK2 Rigidity**: UEFI specifications limit customization options
-- **Coreboot Freedom**: Source code access allows tailoring firmware to specific needs
-- **Mainboard Optimization**: Can optimize for specific hardware configurations
+## Implementation Architecture
 
-### **4. Security Model**
-- **Hardware Root of Trust**: Coreboot enables stronger security foundations
-- **Verified Boot**: Better integration with hardware security features
-- **TPM Integration**: More direct access to TPM functionality
+### Hybrid Approach
+BloodHorn implements a hybrid architecture that automatically detects the available firmware:
 
-### **5. Future-Proofing**
-- **Beyond UEFI**: Prepares for firmware ecosystems beyond UEFI
-- **Research Platform**: Enables experimentation with new boot technologies
-- **Cross-Platform**: Better support for non-x86 architectures
-
-## What Coreboot Brings to BloodHorn
-
-### **Hardware Services Handled by Coreboot:**
-- CPU initialization and configuration
-- Memory controller and mapping
-- PCI/PCIe bus enumeration and initialization
-- Storage controller support (SATA/AHCI/NVMe)
-- USB host controller initialization
-- Network interface initialization
-- Graphics framebuffer setup
-- TPM initialization and configuration
-- ACPI table generation
-- SMBIOS table generation
-
-### **Bootloader Services Retained:**
-- Boot protocol support (Linux, Multiboot, Limine, etc.)
-- Filesystem operations for kernel loading
-- Boot menu and user interface
-- Configuration file parsing
-- Lua scripting support
-- Plugin system
-- Recovery shell
-- Security verification of loaded components
-
-## Hybrid Architecture Benefits
-
-### **Best of Both Worlds**
 ```c
-// Automatic detection and hybrid initialization
-if (CorebootAvailable) {
-    // Use Coreboot for hardware initialization
+// Automatic firmware detection
+if (CorebootPlatformInit()) {
+    // Use Coreboot for hardware services
     CorebootInitGraphics();
     CorebootInitStorage();
     CorebootInitNetwork();
@@ -73,82 +39,17 @@ if (CorebootAvailable) {
 }
 ```
 
-### **Performance Improvements**
-- **Faster Hardware Detection**: Direct hardware probing vs. UEFI abstraction
-- **Reduced Boot Time**: Less firmware overhead in boot chain
-- **Better Memory Management**: More efficient memory mapping
-
-### **Enhanced Compatibility**
-- **Universal Support**: Works with both Coreboot and UEFI firmware
-- **Hardware Agnostic**: Supports wide range of mainboards
-- **Protocol Preservation**: Maintains all existing boot protocols
-
-## Migration Benefits
-
-### **For Users**
-- **Faster Boot**: Noticeably quicker system startup
-- **Better Hardware Support**: Access to latest hardware features
-- **Enhanced Security**: Stronger boot integrity verification
-
-### **For Developers**
-- **Learning Platform**: Understanding of firmware internals
-- **Customization**: Ability to modify firmware behavior
-- **Research**: Platform for boot technology experimentation
-
-## Implementation Strategy
-
-### **Hybrid Approach**
-BloodHorn implements a **hybrid architecture** that:
-1. **Detects firmware type** at boot time
-2. **Uses Coreboot** for hardware services when available
-3. **Falls back to UEFI** for maximum compatibility
-4. **Maintains API compatibility** across firmware types
-
-### **Code Organization**
-- **Coreboot modules** handle firmware-specific operations
-- **Common bootloader logic** works with both firmware types
-- **Automatic adaptation** based on available services
-
-## Conclusion
-
-Coreboot integration transforms BloodHorn from a UEFI-only bootloader into a **universal firmware-compatible** boot platform. While EDK2 was "sufficient" for basic functionality, Coreboot integration provides:
-
-- **Superior performance** through direct hardware control
-- **Enhanced flexibility** for customization and research
-- **Future-proof architecture** for evolving firmware ecosystems
-- **Educational value** for understanding boot process internals
-
-This integration positions BloodHorn as a **modern, adaptable bootloader** suitable for both traditional UEFI systems and advanced Coreboot firmware environments, providing the best of both worlds in a single, production-ready solution.
-
-## What is Coreboot?
-
-Coreboot is an open-source firmware platform that replaces the traditional BIOS/UEFI firmware on x86 systems. It provides:
-
-- **Hardware Initialization**: Direct hardware control and initialization
-- **Memory Management**: Efficient memory mapping and allocation
-- **Device Support**: Native support for storage, network, graphics, and other devices
-- **Security**: Built-in TPM and Secure Boot support
-- **Performance**: Faster boot times and reduced firmware footprint
-
-## BloodHorn Coreboot Integration
-
-### Architecture Changes
-
-The integration replaces UEFI/EDK2 services with Coreboot platform services:
-
-#### Hardware Services Handled by Coreboot:
+### Hardware Services by Coreboot
 - CPU initialization and configuration
-- Memory controller and mapping
-- PCI/PCIe bus enumeration and initialization
+- Memory controller setup and mapping
+- PCI/PCIe bus enumeration
 - Storage controller support (SATA/AHCI/NVMe)
 - USB host controller initialization
-- Network interface initialization
-- Graphics framebuffer setup
-- TPM initialization and configuration
-- ACPI table generation
-- SMBIOS table generation
+- Network interface setup
+- Graphics framebuffer initialization
+- TPM configuration
 
-#### Bootloader Services Retained:
+### Bootloader Services Retained
 - Boot protocol support (Linux, Multiboot, Limine, etc.)
 - Filesystem operations for kernel loading
 - Boot menu and user interface
@@ -156,110 +57,90 @@ The integration replaces UEFI/EDK2 services with Coreboot platform services:
 - Lua scripting support
 - Plugin system
 - Recovery shell
-- Security verification of loaded components
+- Security verification
 
-### Coreboot Platform Module
+## Code Organization
 
-The `coreboot/` directory contains:
+The Coreboot integration is contained in the `coreboot/` directory:
 
-- **`coreboot_platform.c`**: Coreboot platform initialization and interface
-- **`coreboot_platform.h`**: Coreboot platform API definitions
+- **`coreboot_platform.c`**: Coreboot platform initialization and interface functions
+- **`coreboot_platform.h`**: API definitions for Coreboot platform services
 - **`coreboot_payload.c`**: Coreboot payload interface implementation
 - **`coreboot_payload.h`**: Payload interface definitions
-- **`build_coreboot.sh`**: Build script for Coreboot integration
-- **`coreboot_config.mk`**: Coreboot build configuration
-- **`coreboot_defconfig`**: Coreboot configuration file
 
-### Key Features
+## Key Features
 
-#### Memory Management
+### Memory Management
 ```c
-// Get total available RAM
-UINT64 total_memory = CorebootGetTotalMemory();
+// Get Coreboot memory map
+UINT32 mem_map_count = 0;
+CONST COREBOOT_MEM_ENTRY* mem_map = CorebootGetMemoryMap(&mem_map_count);
 
-// Find largest RAM region for kernel loading
-UINT64 largest_addr, largest_size;
-if (CorebootFindLargestMemoryRegion(&largest_addr, &largest_size)) {
-    // Use largest memory region for kernel
+// Find suitable memory region for kernel
+UINT64 kernel_base = 0;
+UINT64 largest_size = 0;
+for (UINT32 i = 0; i < mem_map_count; i++) {
+    if (mem_map[i].type == CB_MEM_RAM && mem_map[i].size > largest_size) {
+        kernel_base = mem_map[i].addr;
+        largest_size = mem_map[i].size;
+    }
 }
 ```
 
-#### Graphics Support
+### Graphics Support
 ```c
 // Initialize graphics using Coreboot framebuffer
 if (CorebootInitGraphics()) {
-    // Graphics available - get framebuffer info
-    UINT32 width, height, bpp;
-    CorebootGetFramebufferInfo(&width, &height, &bpp);
-
-    VOID* framebuffer = CorebootGetFramebufferAddress();
-    // Use framebuffer for boot menu display
+    CONST COREBOOT_FB* framebuffer = CorebootGetFramebuffer();
+    if (framebuffer) {
+        // Use framebuffer for display
+        Print(L"Framebuffer: %ux%u @ 0x%llx\n",
+              framebuffer->x_resolution,
+              framebuffer->y_resolution,
+              framebuffer->physical_address);
+    }
 }
 ```
 
-#### Hardware Information
+### System Information
 ```c
 // Get Coreboot system information
-CONST COREBOOT_SYSINFO* sysinfo = CorebootGetSysinfo();
-if (sysinfo->version) {
-    Print(L"Coreboot version: %a\n", sysinfo->version);
-}
-
-// Check if running under Coreboot
 if (CorebootIsPresent()) {
-    // Coreboot firmware detected
+    CONST COREBOOT_SYSINFO* sysinfo = CorebootGetSysinfo();
+    Print(L"Coreboot version: %a\n", sysinfo->version);
 }
 ```
 
-## Building BloodHorn with Coreboot Support
+## Building with Coreboot Support
 
 ### Prerequisites
-
-1. **EDK2 Development Environment**: Standard EDK2 build tools
-2. **Coreboot Source**: Clone Coreboot repository
-3. **Cross-compilation Tools**: GCC for target architecture
+1. **EDK2 Development Environment**: Standard EDK2 build tools and environment
+2. **Coreboot Source Code**: Coreboot repository for integration
+3. **Cross-compilation Tools**: GCC toolchain for target architecture
 
 ### Build Process
-
 1. **Setup Coreboot**:
    ```bash
-   cd coreboot/
    git clone https://github.com/coreboot/coreboot.git
    cd coreboot
    git checkout 4.22  # Use stable version
    ```
 
-2. **Configure Coreboot**:
-   ```bash
-   cd coreboot/
-   cp ../coreboot_defconfig .config
-   make oldconfig
-   ```
+2. **Configure Coreboot** for BloodHorn payload support
 
-3. **Build BloodHorn**:
+3. **Build BloodHorn** with Coreboot integration:
    ```bash
-   cd ../
    build -p BloodHorn/BloodHorn.dsc -a X64 -b RELEASE
    ```
 
-4. **Create Payload**:
-   ```bash
-   cd coreboot/
-   ./build_coreboot.sh
-   ```
-
-### Coreboot Configuration
-
-The `coreboot_defconfig` file configures Coreboot for BloodHorn:
-
+### Coreboot Configuration Example
 ```makefile
 # Mainboard configuration
 CONFIG_MAINBOARD_DIR="mainboard/google/octopus"
 
-# BloodHorn payload configuration
+# Payload configuration for BloodHorn
 CONFIG_PAYLOAD_ELF=y
-CONFIG_PAYLOAD_FILE="../build/bloodhorn.elf"
-CONFIG_PAYLOAD_CMDLINE="console=ttyS0 root=/dev/sda1 ro quiet splash"
+CONFIG_PAYLOAD_FILE="../Build/BloodHorn/X64/RELEASE/BloodHorn.efi"
 
 # Hardware support
 CONFIG_USB=y
@@ -269,18 +150,14 @@ CONFIG_PCIEXP=y
 
 # Graphics support
 CONFIG_FRAMEBUFFER_KEEP_VESA_MODE=n
-CONFIG_MAINBOARD_HAS_NATIVE_VGA_INIT=y
 
 # Security features
 CONFIG_TPM=y
-CONFIG_VBOOT=y
-CONFIG_VBOOT_VERIFY_FIRMWARE=y
 ```
 
 ## Running BloodHorn as Coreboot Payload
 
 ### Payload Interface
-
 BloodHorn implements the standard Coreboot payload interface:
 
 ```c
@@ -290,30 +167,29 @@ VOID EFIAPI BloodhornPayloadEntry(
 );
 ```
 
-The payload entry point:
-1. Initializes Coreboot platform interface
-2. Sets up graphics, storage, and network devices
-3. Displays boot menu
-4. Loads and executes selected kernel
+The payload entry point handles:
+1. Coreboot platform interface initialization
+2. Hardware device setup (graphics, storage, network)
+3. Boot menu display and user interaction
+4. Kernel loading and execution
 
 ### Memory Layout
-
 Coreboot provides a memory map that BloodHorn uses for:
 - Kernel loading in available RAM regions
-- Framebuffer access for graphics
-- Stack and heap allocation
+- Framebuffer access for graphics display
+- Stack and heap memory allocation
 - Device memory mapping
 
 ## Security Integration
 
 ### TPM Support
-Coreboot handles TPM initialization, BloodHorn uses it for:
-- Boot component measurement
-- Secure boot verification
-- Key management
+Coreboot handles TPM initialization, and BloodHorn uses it for:
+- Boot component measurement and verification
+- Secure boot implementation
+- Key management operations
 
 ### Secure Boot
-Coreboot provides firmware-based secure boot, BloodHorn adds:
+Coreboot provides firmware-based secure boot capabilities, while BloodHorn adds:
 - Kernel signature verification
 - Filesystem integrity checking
 - Measured boot support
@@ -323,15 +199,15 @@ Coreboot provides firmware-based secure boot, BloodHorn adds:
 ### Supported Hardware
 - **Mainboards**: Any Coreboot-supported x86 mainboard
 - **CPUs**: x86_64 and compatible processors
-- **Memory**: DDR3/DDR4 support via Coreboot
+- **Memory**: DDR3/DDR4 support via Coreboot memory controllers
 - **Storage**: SATA/AHCI, NVMe via Coreboot drivers
-- **Graphics**: Native VGA, GOP support
+- **Graphics**: Native VGA and framebuffer support
 - **Network**: Ethernet controllers supported by Coreboot
 
-### Boot Protocols
+### Boot Protocol Compatibility
 All existing boot protocols continue to work:
 - Linux kernel (bzImage, EFI stub)
-- Multiboot/Multiboot2
+- Multiboot 1 and 2
 - Limine protocol
 - Chainloading (GRUB, other bootloaders)
 - PXE network boot
@@ -342,27 +218,27 @@ All existing boot protocols continue to work:
 ### Common Issues
 
 1. **Coreboot Table Not Found**
-   - Verify Coreboot firmware is properly installed
-   - Check mainboard compatibility
-   - Ensure payload is correctly built
+   - Verify Coreboot firmware is properly installed and configured
+   - Check mainboard compatibility with Coreboot
+   - Ensure payload is correctly built and integrated
 
 2. **Graphics Issues**
-   - Verify framebuffer configuration in Coreboot
-   - Check GOP support for target hardware
+   - Verify framebuffer configuration in Coreboot setup
+   - Check graphics hardware compatibility
    - Ensure correct video mode selection
 
 3. **Storage Detection**
-   - Verify storage controller support in Coreboot
-   - Check device enumeration
-   - Confirm filesystem support
+   - Verify storage controller support in Coreboot configuration
+   - Check device enumeration and filesystem support
+   - Confirm proper partition setup
 
 ### Debug Information
+Enable debug logging for troubleshooting:
 
-Enable debug mode for detailed logging:
-
-```makefile
-CONFIG_COLLECT_TIMESTAMPS=y
-CONFIG_DEBUG_COREBOOT=y
+```c
+// Enable verbose logging
+Print(L"Debug: Coreboot table at 0x%llx\n", coreboot_table);
+// Add additional debug output as needed
 ```
 
 ## Migration from UEFI
@@ -371,27 +247,26 @@ CONFIG_DEBUG_COREBOOT=y
 
 | Feature | UEFI/EDK2 | Coreboot |
 |---------|-----------|----------|
-| Hardware Init | UEFI Services | Coreboot Direct |
-| Graphics | GOP Protocol | Framebuffer Direct |
+| Hardware Init | UEFI Services | Coreboot Direct Control |
+| Graphics | GOP Protocol | Framebuffer Direct Access |
 | Memory | UEFI Memory Map | Coreboot Memory Map |
-| Storage | UEFI FS Protocol | Coreboot Block Device |
-| Network | UEFI Network Stack | Coreboot Network Driver |
-| Security | UEFI Auth Variables | Coreboot TPM/Secure Boot |
+| Storage | UEFI FS Protocol | Coreboot Block Devices |
+| Network | UEFI Network Stack | Coreboot Network Drivers |
+| Security | UEFI Auth Variables | Coreboot TPM Integration |
 
 ### Code Changes Required
-
 1. **Replace UEFI Protocol Usage**:
    ```c
-   // Old UEFI approach
+   // UEFI approach
    gBS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, &Gop);
 
-   // New Coreboot approach
+   // Coreboot approach
    VOID* framebuffer = CorebootGetFramebufferAddress();
    ```
 
 2. **Update Memory Management**:
    ```c
-   // Use Coreboot memory map instead of UEFI services
+   // Use Coreboot memory map
    CONST COREBOOT_MEM_ENTRY* mem_map = CorebootGetMemoryMap(&count);
    ```
 
@@ -403,27 +278,16 @@ CONFIG_DEBUG_COREBOOT=y
    }
    ```
 
-## Performance Benefits
+## Development Status
 
-- **Faster Boot Times**: Reduced firmware initialization overhead
-- **Lower Memory Usage**: Smaller firmware footprint
-- **Better Hardware Control**: Direct hardware access
-- **Simplified Architecture**: Less abstraction layers
-
-## Future Enhancements
-
-- **ARM64 Support**: Extend to ARM64 mainboards
-- **Advanced Graphics**: Native graphics driver integration
-- **Enhanced Security**: Hardware-based root of trust
-- **Network Boot**: Improved PXE implementation
-- **Plugin Architecture**: Extended plugin system for Coreboot
+The Coreboot integration is experimental and serves as a platform for learning about firmware internals and boot process optimization. While it provides benefits in specific scenarios, UEFI compatibility ensures broader system support.
 
 ## Support and Development
 
-For issues specific to Coreboot integration:
-1. Verify Coreboot firmware compatibility
+For Coreboot-specific issues:
+1. Verify hardware compatibility with Coreboot
 2. Check BloodHorn build configuration
-3. Review hardware-specific requirements
-4. Consult Coreboot documentation for mainboard support
+3. Review Coreboot documentation for mainboard support
+4. Consult community resources for troubleshooting
 
-This integration makes BloodHorn a modern, efficient bootloader suitable for both traditional UEFI systems and Coreboot-based firmware environments.
+This integration makes BloodHorn a flexible bootloader suitable for both traditional UEFI systems and Coreboot-based firmware environments.

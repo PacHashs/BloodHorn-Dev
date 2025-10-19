@@ -1198,3 +1198,40 @@ HandleCorebootPayloadEntry (
 
     return EFI_NOT_FOUND; // Not running as Coreboot payload
 }
+
+/**
+ * Get root directory handle for filesystem operations
+ */
+EFI_STATUS
+EFIAPI
+get_root_dir (
+  OUT EFI_FILE_HANDLE* root_dir
+  )
+{
+    EFI_STATUS Status;
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* Fs = NULL;
+    EFI_LOADED_IMAGE_PROTOCOL* LoadedImage = NULL;
+
+    // Get the loaded image protocol to find our device
+    Status = gBS->HandleProtocol(gImageHandle, &gEfiLoadedImageProtocolGuid, (VOID**)&LoadedImage);
+    if (EFI_ERROR(Status)) {
+        Print(L"Failed to get loaded image protocol: %r\n", Status);
+        return Status;
+    }
+
+    // Get the file system protocol for the device
+    Status = gBS->HandleProtocol(LoadedImage->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID**)&Fs);
+    if (EFI_ERROR(Status)) {
+        Print(L"Failed to get file system protocol: %r\n", Status);
+        return Status;
+    }
+
+    // Open the root directory
+    Status = Fs->OpenVolume(Fs, root_dir);
+    if (EFI_ERROR(Status)) {
+        Print(L"Failed to open root volume: %r\n", Status);
+        return Status;
+    }
+
+    return EFI_SUCCESS;
+}
