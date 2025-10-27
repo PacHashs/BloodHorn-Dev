@@ -86,6 +86,7 @@ void UnloadFont(Font* font);
 Font* GetDefaultFont(void);
 Font* GetMonospaceFont(void);
 Font* GetBoldFont(void);
+void SetDefaultFont(Font* font);
 
 // Text rendering functions
 int32_t RenderGlyph(Font* font, uint32_t codepoint, int32_t x, int32_t y, GlyphRenderOptions* options);

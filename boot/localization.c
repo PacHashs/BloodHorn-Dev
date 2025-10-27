@@ -12,6 +12,8 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/BaseMemoryLib.h>
+#include <Library/BaseLib.h>
+#include <Library/PrintLib.h>
 #include <Guid/FileInfo.h>
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
@@ -97,7 +99,12 @@ static VOID parse_locale_ini(CHAR8* text) {
             wchar_t* w = AllocateZeroPool((wlen+1)*sizeof(wchar_t));
             if (!w) { FreePool(line); return; }
             for (UINTN i=0;i<wlen;i++) w[i] = (wchar_t)(UINT8)v[i];
-            g_loc[g_loc_count].key = (const char*)AsciiStrDup(k);
+            // duplicate key string
+            UINTN kl = AsciiStrLen(k);
+            CHAR8* kdup = AllocateZeroPool(kl + 1);
+            if (!kdup) { FreePool(w); FreePool(line); return; }
+            CopyMem(kdup, k, kl);
+            g_loc[g_loc_count].key = (const char*)kdup;
             g_loc[g_loc_count].value = (wchar_t*)w;
             g_loc_count++;
         }

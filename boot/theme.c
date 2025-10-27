@@ -7,9 +7,6 @@
 #include "theme.h"
 #include "compat.h"
 #include "localization.h"
-#include "../config/config_ini.h"
-#include "../config/config_json.h"
-#include "../config/config_env.h"
 
 static struct BootMenuTheme current_theme = {
     .background_color = 0x1A1A2E,
@@ -32,17 +29,7 @@ const struct BootMenuTheme* GetBootMenuTheme(void) {
  * Load theme and language configuration from config files
  */
 void LoadThemeAndLanguageFromConfig(void) {
-    struct boot_menu_entry entries[32];
-    int count = parse_ini("config.ini", entries, 32);
-
-    if (count > 0) {
-        for (int i = 0; i < count; i++) {
-            if (strcmp(entries[i].name, "language") == 0) {
-                SetLanguage(entries[i].path);
-            }
-        }
-    }
-
-    // Set default language to English if not specified
-    SetLanguage("en");
+    // Language is applied by main via SetLanguage(config.language)
+    // Theme defaults are already set in current_theme. Extend here if future
+    // theme keys are parsed from central configuration.
 }

@@ -5,18 +5,20 @@
 After building BloodHorn (see INSTALL.md for build instructions), you can use the bootloader as follows:
 
 ### 1. Install the Binary
-- For UEFI: Copy `edk2/BloodHorn.efi` to your EFI system partition (e.g., `/boot/efi/EFI/BloodHorn/BloodHorn.efi`).
+- For UEFI: Copy `edk2/BloodHornX64.efi` to your EFI system partition (e.g., `/boot/efi/EFI/BloodHorn/BloodHornX64.efi`).
 - For BIOS: Write `bios/bootsector.bin` and `bios/stage2.bin` to your disk's MBR and next sector.
-- For ISO/USB: Write `BloodHorn.iso` from the project root to a USB drive or CD.
+- For ISO/USB: Write `BloodHornX64.iso` from the project root to a USB drive or CD.
 
 ### 2. Configure the Bootloader
-- Place `bloodhorn.ini` or `bloodhorn.json` in the root of your boot partition (e.g., `/boot/`, `/mnt/usb/`, or EFI partition root).
+- Place `bloodhorn.json` in the root of your boot partition (e.g., `/boot/`, `/mnt/usb/`, or EFI partition root).
+- Optional: create localization files under `\locales\<lang>.ini` (e.g., `\locales\en.ini`).
+- Optional: provide a PSF1 font under `/fonts/` and set `boot.font_path` (e.g., `/fonts/ter-16n.psf`).
 - You can customize:
   - Boot entries (kernel, initrd, cmdline)
   - Menu timeout and default entry
   - Theme (colors, background image)
   - Language (UI localization)
-- See CONFIG.md for all options and examples.
+- See `docs/Configuration.md` for all options and examples.
 
 ### 3. Booting
 - Reboot your machine and select BloodHorn from the UEFI/BIOS boot menu.

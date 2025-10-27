@@ -152,6 +152,12 @@ Font* GetBoldFont(void) {
     return g_bold_font;
 }
 
+void SetDefaultFont(Font* font) {
+    if (font) {
+        g_default_font = font;
+    }
+}
+
 // Render a single glyph from bitmap font
 static int32_t RenderBitmapGlyph(Font* font, uint32_t codepoint, int32_t x, int32_t y, GlyphRenderOptions* options) {
     if (!font || !font->font_data || codepoint < 32 || codepoint > 126) {

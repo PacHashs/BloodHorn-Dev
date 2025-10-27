@@ -12,6 +12,7 @@ BloodHorn supports multiple configuration methods to customize boot behavior, th
 [boot]
 default = linux
 menu_timeout = 5
+font_path = /fonts/ter-16n.psf
 theme_background_color = 0x000080
 theme_header_color = 0xFFFFFF
 theme_highlight_color = 0xFF8000
@@ -43,6 +44,7 @@ shell_access = true
   "boot": {
     "default": "linux",
     "menu_timeout": 5,
+    "font_path": "/fonts/ter-16n.psf",
     "theme": {
       "background_color": "0x000080",
       "header_color": "0xFFFFFF",
@@ -86,6 +88,7 @@ export BLOODHORN_LINUX_CMDLINE="root=/dev/sda1 ro"
 export BLOODHORN_THEME_BACKGROUND=0x000080
 export BLOODHORN_THEME_TEXT=0xFFFFFF
 export BLOODHORN_LANGUAGE=en
+export BLOODHORN_FONT_PATH=/fonts/ter-16n.psf
 export BLOODHORN_RECOVERY_ENABLED=1
 export BLOODHORN_SECURE_BOOT=1
 ```
@@ -105,6 +108,7 @@ BloodHorn loads configuration in the following order (later sources override ear
 - `default`: Default boot entry name
 - `menu_timeout`: Menu timeout in seconds (0-300)
 - `language`: Interface language (en, es, fr, de, etc.)
+- `font_path`: PSF1 font path used for rendering text (e.g., `/fonts/ter-16n.psf`)
 - `theme_*`: Theme color and appearance settings
 
 ### Boot Entry Configuration
@@ -131,6 +135,23 @@ Each boot entry supports the following options:
 ### Visual Elements
 - `theme_background_image`: Background image file path (BMP format supported)
 
+## Localization Files
+
+In addition to `boot.language`, you can provide external localization files that override built-in strings:
+
+- Location: `\\locales\\<lang>.ini` (e.g., `\\locales\\en.ini`)
+- Format: simple `key=value` pairs
+
+Example `\\locales\\en.ini`:
+
+```
+menu_title=BloodHorn Boot Menu
+select=Select
+boot=Boot
+exit=Exit
+instructions=↑/↓: Select  Enter: Boot  ESC: Exit
+```
+
 ## Network Configuration
 
 Network settings for PXE boot and remote configuration:
@@ -154,7 +175,7 @@ Network settings for PXE boot and remote configuration:
 
 ## Supported Languages
 
-BloodHorn supports multiple interface languages:
+BloodHorn supports multiple interface languages depending on your setup of localization. (you can have as many langs as you want):
 
 - `en`: English (default)
 - `es`: Spanish
@@ -181,6 +202,8 @@ BloodHorn supports multiple interface languages:
 [boot]
 default = linux
 menu_timeout = 10
+font_path = /fonts/ter-16n.psf
+language = en
 
 [linux]
 kernel = /boot/vmlinuz
@@ -193,6 +216,8 @@ cmdline = root=/dev/sda1 ro quiet
 [boot]
 default = linux
 menu_timeout = 5
+font_path = /fonts/ter-16n.psf
+language = en
 
 [linux]
 kernel = /boot/vmlinuz-linux

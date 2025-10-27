@@ -27,6 +27,7 @@
 #include "boot/menu.h"
 #include "boot/theme.h"
 #include "boot/localization.h"
+#include "boot/font.h"
 #include "boot/mouse.h"
 #include "boot/secure.h"
 #include "fs/fat32.h"
@@ -540,7 +541,16 @@ UefiMain (
     BOOT_CONFIG config;
     LoadBootConfig(&config);
 
-    // Optionally, theme/language loading can use config.language later
+    // Apply language and font from configuration before any UI
+    SetLanguage(config.language);
+    if (config.font_path[0] != '\0') {
+        Font* user_font = LoadFontFile(config.font_path);
+        if (user_font) {
+            SetDefaultFont(user_font);
+        }
+    }
+
+    // Theme loading (language already applied from config)
     LoadThemeAndLanguageFromConfig();
     InitMouse();
 
