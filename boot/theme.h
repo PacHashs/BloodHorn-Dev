@@ -22,5 +22,6 @@ struct BootMenuTheme {
 
 void SetBootMenuTheme(const struct BootMenuTheme* theme);
 const struct BootMenuTheme* GetBootMenuTheme(void);
+void LoadThemeAndLanguageFromConfig(void);
 
-#endif // BLOODHORN_THEME_H 
+#endif // BLOODHORN_THEME_H

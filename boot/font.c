@@ -8,6 +8,14 @@
 #include "compat.h"
 #include "../uefi/graphics.h"
 #include <string.h>
+#include <Uefi.h>
+#include <Library/UefiLib.h>
+#include <Library/UefiBootServicesTableLib.h>
+#include <Library/MemoryAllocationLib.h>
+#include <Library/BaseMemoryLib.h>
+#include <Guid/FileInfo.h>
+#include <Protocol/LoadedImage.h>
+#include <Protocol/SimpleFileSystem.h>
 
 // Built-in 8x16 bitmap font (ASCII 32-126)
 static const uint8_t builtin_font_8x16[] = {
@@ -287,9 +295,96 @@ Font* LoadFontFromMemory(const void* data, uint32_t size, FontFormat format) {
     return font;
 }
 
+static EFI_STATUS get_root(EFI_FILE_HANDLE* root) {
+    EFI_STATUS Status;
+    EFI_LOADED_IMAGE_PROTOCOL* LoadedImage = NULL;
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL* Fs = NULL;
+    extern EFI_HANDLE gImageHandle;
+    extern EFI_BOOT_SERVICES* gBS;
+    Status = gBS->HandleProtocol(gImageHandle, &gEfiLoadedImageProtocolGuid, (VOID**)&LoadedImage);
+    if (EFI_ERROR(Status)) return Status;
+    Status = gBS->HandleProtocol(LoadedImage->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID**)&Fs);
+    if (EFI_ERROR(Status)) return Status;
+    return Fs->OpenVolume(Fs, root);
+}
+
+static EFI_STATUS read_file(CONST CHAR16* path, VOID** out, UINTN* out_size) {
+    *out = NULL; *out_size = 0;
+    EFI_STATUS Status; EFI_FILE_HANDLE root=NULL, file=NULL;
+    Status = get_root(&root); if (EFI_ERROR(Status)) return Status;
+    Status = root->Open(root, &file, (CHAR16*)path, EFI_FILE_MODE_READ, 0);
+    if (EFI_ERROR(Status)) return Status;
+    EFI_FILE_INFO* info = NULL; UINTN info_sz = 0;
+    Status = file->GetInfo(file, &gEfiFileInfoGuid, &info_sz, NULL);
+    if (Status == EFI_BUFFER_TOO_SMALL) {
+        info = AllocateZeroPool(info_sz);
+        if (!info) { file->Close(file); return EFI_OUT_OF_RESOURCES; }
+        Status = file->GetInfo(file, &gEfiFileInfoGuid, &info_sz, info);
+    }
+    if (EFI_ERROR(Status)) { if (info) FreePool(info); file->Close(file); return Status; }
+    UINTN size = (UINTN)info->FileSize; VOID* buf = AllocateZeroPool(size);
+    if (!buf) { FreePool(info); file->Close(file); return EFI_OUT_OF_RESOURCES; }
+    Status = file->Read(file, &size, buf);
+    file->Close(file); FreePool(info);
+    if (EFI_ERROR(Status)) { FreePool(buf); return Status; }
+    *out = buf; *out_size = size; return EFI_SUCCESS;
+}
+
+// Minimal PSF1 detection and extraction (8px width, height from header)
+static BOOLEAN parse_psf1(const UINT8* data, UINTN size, UINT8* out_height, const UINT8** glyphs, UINTN* glyph_count) {
+    if (size < 4) return FALSE;
+    // PSF1 magic 0x36 0x04
+    if (!(data[0] == 0x36 && data[1] == 0x04)) return FALSE;
+    UINT8 mode = data[2];
+    UINT8 charsize = data[3];
+    *out_height = charsize;
+    *glyph_count = (mode & 0x01) ? 512 : 256;
+    UINTN table_off = 4; // followed by glyphs
+    if (size < table_off + (UINTN)charsize * (*glyph_count)) return FALSE;
+    *glyphs = data + table_off;
+    return TRUE;
+}
+
 Font* LoadFontFile(const char* filename) {
-    // In a real implementation, this would read from filesystem
-    // For now, return default font
+    if (!filename || !filename[0]) return GetDefaultFont();
+    // Convert ASCII path to UCS-2
+    CHAR16 wpath[256];
+    UnicodeSPrint(wpath, sizeof(wpath), L"%a", filename);
+    VOID* filebuf = NULL; UINTN filesz = 0;
+    if (EFI_ERROR(read_file(wpath, &filebuf, &filesz)) || !filebuf || filesz < 4) {
+        if (filebuf) FreePool(filebuf);
+        return GetDefaultFont();
+    }
+
+    const UINT8* bytes = (const UINT8*)filebuf;
+    UINT8 h = 0; const UINT8* glyphs = NULL; UINTN glyph_count = 0;
+    if (parse_psf1(bytes, filesz, &h, &glyphs, &glyph_count)) {
+        UINTN bpg = (UINTN)h; // 1 byte per row, width=8
+        UINTN table_sz = bpg * glyph_count;
+        UINT8* table = AllocateZeroPool(table_sz);
+        if (!table) { FreePool(filebuf); return GetDefaultFont(); }
+        CopyMem(table, glyphs, table_sz);
+
+        Font* font = (Font*)malloc(sizeof(Font));
+        if (!font) { FreePool(table); FreePool(filebuf); return GetDefaultFont(); }
+        font->format = FONT_FORMAT_BITMAP;
+        font->metadata.name = "PSF1";
+        font->metadata.size = h;
+        font->metadata.weight = FONT_WEIGHT_REGULAR;
+        font->metadata.style = FONT_STYLE_NORMAL;
+        font->metadata.line_height = h;
+        font->metadata.baseline = (h > 4) ? (h - 4) : h;
+        font->metadata.max_width = 8;
+        font->font_data = table;
+        font->font_data_size = (uint32_t)table_sz;
+        font->private_context = filebuf; // keep original buffer for lifetime if needed
+
+        if (g_font_cache_count < MAX_CACHED_FONTS) g_font_cache[g_font_cache_count++] = font;
+        return font;
+    }
+
+    // Unsupported font type -> fallback
+    FreePool(filebuf);
     return GetDefaultFont();
 }
 
@@ -311,7 +406,7 @@ void UnloadFont(Font* font) {
         free(font->font_data);
     }
     if (font->private_context) {
-        free(font->private_context);
+        FreePool(font->private_context);
     }
     free(font);
 }

@@ -6,6 +6,10 @@
  */
 #include "theme.h"
 #include "compat.h"
+#include "localization.h"
+#include "../config/config_ini.h"
+#include "../config/config_json.h"
+#include "../config/config_env.h"
 
 static struct BootMenuTheme current_theme = {
     .background_color = 0x1A1A2E,
@@ -16,10 +20,29 @@ static struct BootMenuTheme current_theme = {
     .footer_color = 0x8888AA,
     .background_image = NULL
 };
-// ehhhh string.h and etc don't work in these stages of booting. no libc. no native header. but don't worry. my compat.h will handle this
+
 void SetBootMenuTheme(const struct BootMenuTheme* theme) {
     memcpy(&current_theme, theme, sizeof(struct BootMenuTheme));
 }
 const struct BootMenuTheme* GetBootMenuTheme(void) {
     return &current_theme;
-} 
+}
+
+/**
+ * Load theme and language configuration from config files
+ */
+void LoadThemeAndLanguageFromConfig(void) {
+    struct boot_menu_entry entries[32];
+    int count = parse_ini("config.ini", entries, 32);
+
+    if (count > 0) {
+        for (int i = 0; i < count; i++) {
+            if (strcmp(entries[i].name, "language") == 0) {
+                SetLanguage(entries[i].path);
+            }
+        }
+    }
+
+    // Set default language to English if not specified
+    SetLanguage("en");
+}

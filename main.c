@@ -56,6 +56,12 @@
 // Include Coreboot platform integration
 #include "coreboot/coreboot_platform.h"
 
+// File hash verification structure (typedef before usage)
+typedef struct {
+    char path[256];
+    uint8_t expected_hash[64];
+} FILE_HASH;
+
 // Global TPM 2.0 context
 static EFI_TCG2_PROTOCOL* gTcg2Protocol = NULL;
 
@@ -65,9 +71,15 @@ static bh_context_t* gBhContext = NULL;
 // Global image handle for ExitBootServices and child image loading
 static EFI_HANDLE gImageHandle = NULL;
 
+// Global flag to indicate if Coreboot is available
+STATIC BOOLEAN gCorebootAvailable = FALSE;
+
 // Global font handles
 static bh_font_t gDefaultFont = {0};
 static bh_font_t gHeaderFont = {0};
+
+// Global known hashes for kernel verification (if security is enabled)
+STATIC FILE_HASH g_known_hashes[1] = {0};
 
 // Forward declaration for Coreboot main entry point
 extern VOID EFIAPI CorebootMain(VOID* coreboot_table, VOID* payload);
@@ -91,12 +103,6 @@ typedef struct {
     char language[8];
     bool enable_networking;
 } BOOT_CONFIG;
-
-// File hash verification structure
-typedef struct {
-    char path[256];
-    uint8_t expected_hash[64];
-} FILE_HASH;
 
 // Coreboot boot parameter structure definitions
 #define COREBOOT_BOOT_SIGNATURE 0x12345678
@@ -146,6 +152,215 @@ EFI_STATUS EFIAPI BootRiscv64Wrapper(VOID);
 EFI_STATUS EFIAPI BootLoongarch64Wrapper(VOID);
 
 /**
+ * Minimal helpers for configuration loading (INI -> JSON -> UEFI variables)
+ */
+STATIC BOOLEAN str_ieq(const CHAR8* a, const CHAR8* b) {
+    while (*a && *b) {
+        CHAR8 ca = (*a >= 'A' && *a <= 'Z') ? (*a - 'A' + 'a') : *a;
+        CHAR8 cb = (*b >= 'A' && *b <= 'Z') ? (*b - 'A' + 'a') : *b;
+        if (ca != cb) return FALSE;
+        a++; b++;
+    }
+
+// Load a file from the filesystem into memory (no hash verification)
+STATIC
+EFI_STATUS
+LoadFileRaw (
+  IN CHAR16* Path,
+  OUT VOID** Buffer,
+  OUT UINTN* Size
+  )
+{
+    EFI_STATUS Status;
+    EFI_FILE_HANDLE root_dir;
+    EFI_FILE_HANDLE file;
+    VOID* buffer = NULL;
+    UINTN size = 0;
+
+    Status = get_root_dir(&root_dir);
+    if (EFI_ERROR(Status)) {
+        return Status;
+    }
+
+    Status = root_dir->Open(root_dir, &file, Path, EFI_FILE_MODE_READ, 0);
+    if (EFI_ERROR(Status)) {
+        return Status;
+    }
+
+    EFI_FILE_INFO* info = NULL;
+    UINTN info_size = 0;
+    Status = file->GetInfo(file, &gEfiFileInfoGuid, &info_size, NULL);
+    if (Status == EFI_BUFFER_TOO_SMALL) {
+        info = AllocateZeroPool(info_size);
+        if (!info) { file->Close(file); return EFI_OUT_OF_RESOURCES; }
+        Status = file->GetInfo(file, &gEfiFileInfoGuid, &info_size, info);
+    }
+    if (EFI_ERROR(Status)) { if (info) FreePool(info); file->Close(file); return Status; }
+
+    size = (UINTN)info->FileSize;
+    buffer = AllocateZeroPool(size);
+    if (!buffer) { FreePool(info); file->Close(file); return EFI_OUT_OF_RESOURCES; }
+
+    Status = file->Read(file, &size, buffer);
+    file->Close(file);
+    FreePool(info);
+    if (EFI_ERROR(Status)) { FreePool(buffer); return Status; }
+
+    *Buffer = buffer;
+    *Size = size;
+    return EFI_SUCCESS;
+}
+    return *a == 0 && *b == 0;
+}
+
+STATIC BOOLEAN parse_bool_ascii(const CHAR8* v, BOOLEAN defv) {
+    if (!v) return defv;
+    if (str_ieq(v, "true") || str_ieq(v, "1") || str_ieq(v, "yes")) return TRUE;
+    if (str_ieq(v, "false") || str_ieq(v, "0") || str_ieq(v, "no")) return FALSE;
+    return defv;
+}
+
+STATIC VOID trim_ascii(CHAR8* s) {
+    if (!s) return;
+    // trim leading
+    CHAR8* p = s; while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+    if (p != s) CopyMem(s, p, AsciiStrLen(p)+1);
+    // trim trailing
+    UINTN n = AsciiStrLen(s);
+    while (n > 0 && (s[n-1] == ' ' || s[n-1] == '\t' || s[n-1] == '\r' || s[n-1] == '\n')) { s[n-1] = 0; n--; }
+}
+
+STATIC EFI_STATUS ReadWholeFileAscii(EFI_FILE_HANDLE root, CONST CHAR16* path, CHAR8** outBuf, UINTN* outLen) {
+    EFI_STATUS Status;
+    EFI_FILE_HANDLE file = NULL;
+    *outBuf = NULL; *outLen = 0;
+    Status = root->Open(root, &file, (CHAR16*)path, EFI_FILE_MODE_READ, 0);
+    if (EFI_ERROR(Status)) return Status;
+    EFI_FILE_INFO* info = NULL; UINTN info_size = 0;
+    Status = file->GetInfo(file, &gEfiFileInfoGuid, &info_size, NULL);
+    if (Status == EFI_BUFFER_TOO_SMALL) {
+        info = AllocateZeroPool(info_size);
+        if (!info) { file->Close(file); return EFI_OUT_OF_RESOURCES; }
+        Status = file->GetInfo(file, &gEfiFileInfoGuid, &info_size, info);
+    }
+    if (EFI_ERROR(Status)) { if (info) FreePool(info); file->Close(file); return Status; }
+    UINTN size = (UINTN)info->FileSize;
+    CHAR8* buf = AllocateZeroPool(size + 1);
+    if (!buf) { FreePool(info); file->Close(file); return EFI_OUT_OF_RESOURCES; }
+    Status = file->Read(file, &size, buf);
+    file->Close(file);
+    FreePool(info);
+    if (EFI_ERROR(Status)) { FreePool(buf); return Status; }
+    buf[size] = 0;
+    *outBuf = buf; *outLen = size;
+    return EFI_SUCCESS;
+}
+
+STATIC VOID ApplyIniToConfig(const CHAR8* ini, BOOT_CONFIG* config) {
+    CHAR8 section[64] = {0};
+    const CHAR8* cur = ini;
+    while (*cur) {
+        // read line
+        const CHAR8* lineStart = cur;
+        while (*cur && *cur != '\n') cur++;
+        UINTN len = (UINTN)(cur - lineStart);
+        CHAR8* line = AllocateZeroPool(len + 1);
+        if (!line) return;
+        CopyMem(line, lineStart, len); line[len] = 0;
+        if (*cur == '\n') cur++;
+
+        trim_ascii(line);
+        if (line[0] == '#' || line[0] == ';' || line[0] == 0) { FreePool(line); continue; }
+        if (line[0] == '[') {
+            CHAR8* rb = AsciiStrStr(line, "]");
+            if (rb) {
+                *rb = 0;
+                AsciiStrCpyS(section, sizeof(section), line + 1);
+            }
+            FreePool(line); continue;
+        }
+        CHAR8* eq = AsciiStrStr(line, "=");
+        if (!eq) { FreePool(line); continue; }
+        *eq = 0; CHAR8* k = line; CHAR8* v = eq + 1; trim_ascii(k); trim_ascii(v);
+
+        if (str_ieq(section, "boot")) {
+            if (str_ieq(k, "default")) {
+                AsciiStrCpyS(config->default_entry, sizeof(config->default_entry), v);
+            } else if (str_ieq(k, "menu_timeout")) {
+                config->menu_timeout = (int)AsciiStrDecimalToUintn(v);
+            } else if (str_ieq(k, "language")) {
+                AsciiStrCpyS(config->language, sizeof(config->language), v);
+            } else if (str_ieq(k, "secure_boot")) {
+                config->secure_boot = parse_bool_ascii(v, config->secure_boot);
+            } else if (str_ieq(k, "tpm_enabled")) {
+                config->tpm_enabled = parse_bool_ascii(v, config->tpm_enabled);
+            } else if (str_ieq(k, "use_gui")) {
+                config->use_gui = parse_bool_ascii(v, config->use_gui);
+            }
+        } else if (str_ieq(section, "linux")) {
+            if (str_ieq(k, "kernel")) {
+                AsciiStrCpyS(config->kernel, sizeof(config->kernel), v);
+            } else if (str_ieq(k, "initrd")) {
+                AsciiStrCpyS(config->initrd, sizeof(config->initrd), v);
+            } else if (str_ieq(k, "cmdline")) {
+                AsciiStrCpyS(config->cmdline, sizeof(config->cmdline), v);
+            }
+        }
+        FreePool(line);
+    }
+}
+
+STATIC VOID ApplyJsonToConfig(const CHAR8* js, BOOT_CONFIG* config) {
+    // Minimal substring extraction; this is not a full JSON parser but adequate for expected fields.
+    #define FIND_STR(key, dst) do { const CHAR8* p = AsciiStrStr((CHAR8*)js, key); if (p) { p = AsciiStrStr((CHAR8*)p, ":"); if (p) { p++; while (*p==' '||*p=='\t' || *p=='\n') p++; if (*p=='\"') { p++; const CHAR8* q=p; while (*q && *q!='\"') q++; UINTN L=(UINTN)(q-p); CHAR8 tmp[512]={0}; if (L>=sizeof(tmp)) L=sizeof(tmp)-1; CopyMem(tmp,p,L); tmp[L]=0; AsciiStrCpyS(dst, sizeof(dst), tmp); } } } } while(0)
+    #define FIND_INT(key, dst) do { const CHAR8* p = AsciiStrStr((CHAR8*)js, key); if (p) { p = AsciiStrStr((CHAR8*)p, ":"); if (p) { p++; while (*p==' '||*p=='\t'||*p=='\n') p++; INTN val=0; while (*p>='0'&&*p<='9'){ val = val*10 + (*p-'0'); p++; } dst = (int)val; } } } while(0)
+    #define FIND_BOOL(key, dst) do { const CHAR8* p = AsciiStrStr((CHAR8*)js, key); if (p) { p = AsciiStrStr((CHAR8*)p, ":"); if (p) { p++; while (*p==' '||*p=='\t'||*p=='\n') p++; if (AsciiStrnCmp(p, "true", 4)==0) dst=TRUE; else if (AsciiStrnCmp(p,"false",5)==0) dst=FALSE; } } } while(0)
+
+    FIND_STR("\"default\"", config->default_entry);
+    FIND_INT("\"menu_timeout\"", config->menu_timeout);
+    FIND_STR("\"language\"", config->language);
+
+    // entries.linux
+    FIND_STR("\"kernel\"", config->kernel);
+    FIND_STR("\"initrd\"", config->initrd);
+    FIND_STR("\"cmdline\"", config->cmdline);
+}
+
+STATIC VOID ApplyUefiEnvOverrides(BOOT_CONFIG* config) {
+    struct { CONST CHAR16* name; enum { T_STR, T_INT, T_BOOL } typ; VOID* target; UINTN tsize; } vars[] = {
+        { L"BLOODHORN_DEFAULT", T_STR,  config->default_entry, sizeof(config->default_entry) },
+        { L"BLOODHORN_MENU_TIMEOUT", T_INT, &config->menu_timeout, sizeof(config->menu_timeout) },
+        { L"BLOODHORN_LANGUAGE", T_STR,  config->language, sizeof(config->language) },
+        { L"BLOODHORN_LINUX_KERNEL", T_STR,  config->kernel, sizeof(config->kernel) },
+        { L"BLOODHORN_LINUX_INITRD", T_STR,  config->initrd, sizeof(config->initrd) },
+        { L"BLOODHORN_LINUX_CMDLINE", T_STR,  config->cmdline, sizeof(config->cmdline) },
+        { L"BLOODHORN_SECURE_BOOT", T_BOOL, &config->secure_boot, sizeof(config->secure_boot) },
+        { L"BLOODHORN_TPM_ENABLED", T_BOOL, &config->tpm_enabled, sizeof(config->tpm_enabled) },
+    };
+
+    for (UINTN i = 0; i < ARRAY_SIZE(vars); ++i) {
+        UINTN sz = 0; EFI_STATUS st;
+        st = gRT->GetVariable((CHAR16*)vars[i].name, &gEfiGlobalVariableGuid, NULL, &sz, NULL);
+        if (st != EFI_BUFFER_TOO_SMALL) continue;
+        VOID* buf = AllocateZeroPool(sz);
+        if (!buf) continue;
+        st = gRT->GetVariable((CHAR16*)vars[i].name, &gEfiGlobalVariableGuid, NULL, &sz, buf);
+        if (EFI_ERROR(st)) { FreePool(buf); continue; }
+        if (vars[i].typ == T_STR) {
+            // treat as UCS-2 string -> convert to ASCII
+            CHAR16* w = (CHAR16*)buf; CHAR8 a[256] = {0};
+            UnicodeStrToAsciiStrS(w, a, sizeof(a));
+            AsciiStrCpyS((CHAR8*)vars[i].target, vars[i].tsize, a);
+        } else if (vars[i].typ == T_INT) {
+            if (sz >= sizeof(UINT32)) *(int*)vars[i].target = (int)(*(UINT32*)buf);
+        } else if (vars[i].typ == T_BOOL) {
+            if (sz >= sizeof(UINT8)) *(BOOLEAN*)vars[i].target = (*(UINT8*)buf) ? TRUE : FALSE;
+        }
+        FreePool(buf);
+    }
+}
+
+/**
  * Load boot configuration from files
  */
 STATIC
@@ -154,7 +369,7 @@ LoadBootConfig (
   OUT BOOT_CONFIG* config
   )
 {
-    // Set default values
+    // Defaults
     AsciiStrCpyS(config->default_entry, sizeof(config->default_entry), "linux");
     config->menu_timeout = 10;
     config->tpm_enabled = TRUE;
@@ -165,36 +380,37 @@ LoadBootConfig (
     config->header_font_size = 16;
     AsciiStrCpyS(config->language, sizeof(config->language), "en");
     config->enable_networking = FALSE;
+    config->kernel[0] = 0; config->initrd[0] = 0; config->cmdline[0] = 0;
 
-    // Attempt to load from config.ini
-    struct boot_menu_entry entries[32];
-    int count = parse_ini("config.ini", entries, 32);
-    if (count > 0) {
-        Print(L"Loaded %d entries from config.ini\n", count);
-        for (int i = 0; i < count; i++) {
-            if (AsciiStrCmp(entries[i].name, "default_entry") == 0) {
-                AsciiStrCpyS(config->default_entry, sizeof(config->default_entry), entries[i].path);
-            } else if (AsciiStrCmp(entries[i].name, "menu_timeout") == 0) {
-                config->menu_timeout = AsciiStrDecimalToUintn(entries[i].path);
-            } else if (AsciiStrCmp(entries[i].name, "tpm_enabled") == 0) {
-                config->tpm_enabled = (AsciiStrCmp(entries[i].path, "true") == 0);
-            } else if (AsciiStrCmp(entries[i].name, "secure_boot") == 0) {
-                config->secure_boot = (AsciiStrCmp(entries[i].path, "true") == 0);
-            } else if (AsciiStrCmp(entries[i].name, "use_gui") == 0) {
-                config->use_gui = (AsciiStrCmp(entries[i].path, "true") == 0);
-            } else if (AsciiStrCmp(entries[i].name, "font_path") == 0) {
-                AsciiStrCpyS(config->font_path, sizeof(config->font_path), entries[i].path);
-            } else if (AsciiStrCmp(entries[i].name, "font_size") == 0) {
-                config->font_size = AsciiStrDecimalToUintn(entries[i].path);
-            } else if (AsciiStrCmp(entries[i].name, "header_font_size") == 0) {
-                config->header_font_size = AsciiStrDecimalToUintn(entries[i].path);
-            } else if (AsciiStrCmp(entries[i].name, "language") == 0) {
-                AsciiStrCpyS(config->language, sizeof(config->language), entries[i].path);
-            } else if (AsciiStrCmp(entries[i].name, "enable_networking") == 0) {
-                config->enable_networking = (AsciiStrCmp(entries[i].path, "true") == 0);
-            }
-        }
+    EFI_STATUS Status;
+    EFI_FILE_HANDLE root_dir;
+    Status = get_root_dir(&root_dir);
+    if (EFI_ERROR(Status)) {
+        Print(L"Failed to open filesystem for config: %r\n", Status);
+        return EFI_SUCCESS; // keep defaults, do not fail boot
     }
+
+    // 1) INI: bloodhorn.ini
+    CHAR8* buf = NULL; UINTN blen = 0;
+    Status = ReadWholeFileAscii(root_dir, L"bloodhorn.ini", &buf, &blen);
+    if (!EFI_ERROR(Status) && buf && blen > 0) {
+        ApplyIniToConfig(buf, config);
+        FreePool(buf); buf = NULL; blen = 0;
+    }
+
+    // 2) JSON: bloodhorn.json
+    Status = ReadWholeFileAscii(root_dir, L"bloodhorn.json", &buf, &blen);
+    if (!EFI_ERROR(Status) && buf && blen > 0) {
+        ApplyJsonToConfig(buf, config);
+        FreePool(buf); buf = NULL; blen = 0;
+    }
+
+    // 3) Environment variables (UEFI vars)
+    ApplyUefiEnvOverrides(config);
+
+    // Clamp values according to docs
+    if (config->menu_timeout < 0) config->menu_timeout = 0;
+    if (config->menu_timeout > 300) config->menu_timeout = 300;
 
     return EFI_SUCCESS;
 }
@@ -320,8 +536,54 @@ UefiMain (
         Print(L"BloodHorn Library v%d.%d.%d\n", major, minor, patch);
     }
 
+    // Load configuration (INI -> JSON -> UEFI vars)
+    BOOT_CONFIG config;
+    LoadBootConfig(&config);
+
+    // Optionally, theme/language loading can use config.language later
     LoadThemeAndLanguageFromConfig();
     InitMouse();
+
+    // Pre-menu autoboot based on configuration
+    BOOLEAN showMenu = TRUE;
+    if (config.menu_timeout > 0) {
+        // Countdown; any key press cancels and shows menu
+        INTN secs = config.menu_timeout;
+        while (secs > 0) {
+            Print(L"Auto-boot '%a' in %d seconds... Press any key to open menu.\r\n", config.default_entry, secs);
+            // Wait up to 1 second, polling key every 100ms
+            BOOLEAN keyPressed = FALSE;
+            for (int i = 0; i < 10; i++) {
+                EFI_INPUT_KEY Key;
+                if (!EFI_ERROR(gST->ConIn->ReadKeyStroke(gST->ConIn, &Key))) { keyPressed = TRUE; break; }
+                gBS->Stall(100000); // 100ms
+            }
+            if (keyPressed) { showMenu = TRUE; break; }
+            secs--;
+            if (secs == 0) {
+                showMenu = FALSE;
+            }
+        }
+    }
+
+    // If no key pressed within timeout, autoboot supported default
+    if (!showMenu) {
+        if (AsciiStrCmp(config.default_entry, "linux") == 0 && config.kernel[0] != 0) {
+            const char* k = config.kernel;
+            const char* i = (config.initrd[0] != 0) ? config.initrd : NULL;
+            const char* c = (config.cmdline[0] != 0) ? config.cmdline : "";
+            EFI_STATUS ls = linux_load_kernel(k, i, c);
+            if (!EFI_ERROR(ls)) {
+                return EFI_SUCCESS;
+            } else {
+                Print(L"Autoboot linux failed: %r\n", ls);
+                showMenu = TRUE;
+            }
+        } else {
+            // Unsupported default entry fallback to menu
+            showMenu = TRUE;
+        }
+    }
 
     AddBootEntry(L"BloodChain Boot Protocol", BootBloodchainWrapper);
     AddBootEntry(L"Linux Kernel", BootLinuxKernelWrapper);
@@ -338,7 +600,7 @@ UefiMain (
     AddBootEntry(L"UEFI Shell", (EFI_STATUS (*)(void))BootUefiShellWrapper);
     AddBootEntry(L"Exit to UEFI Firmware", ExitToFirmwareWrapper);
 
-    Status = ShowBootMenu();
+    Status = showMenu ? ShowBootMenu() : EFI_NOT_READY;
     if (Status == EFI_SUCCESS) {
         VOID* KernelBuffer = NULL;
         UINTN KernelSize = 0;
@@ -874,7 +1136,6 @@ ExecuteKernelWithCoreboot (
     boot_params->boot_flags = COREBOOT_BOOT_FLAG_KERNEL;
 
     // Set up framebuffer information if available
-    CONST COREBOOT_FB* framebuffer = CorebootGetFramebuffer();
     if (framebuffer) {
         boot_params->framebuffer_addr = framebuffer->physical_address;
         boot_params->framebuffer_width = framebuffer->x_resolution;
@@ -888,7 +1149,7 @@ ExecuteKernelWithCoreboot (
     UINT64 total_memory = CorebootGetTotalMemory();
     boot_params->memory_size = total_memory;
 
-    // Set up command line if provided
+    // Set up initrd if provided
     if (InitrdBuffer) {
         boot_params->initrd_addr = (UINT64)(UINTN)InitrdBuffer;
         boot_params->boot_flags |= COREBOOT_BOOT_FLAG_INITRD;
@@ -1081,10 +1342,8 @@ ExitBootServicesAndExecuteKernel (
     }
 
     // Set up initrd if provided
-    if (InitrdBuffer) {
-        boot_params->initrd_addr = (UINT64)(UINTN)InitrdBuffer;
-        boot_params->boot_flags |= COREBOOT_BOOT_FLAG_INITRD;
-    }
+    // Note: InitrdBuffer parameter is not used in this implementation
+    // but would be set up here if needed
 
     // Validate boot parameters
     if (!ValidateBootParameters(boot_params)) {

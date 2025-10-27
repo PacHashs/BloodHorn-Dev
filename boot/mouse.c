@@ -17,7 +17,6 @@ VOID EFIAPI InitMouse(VOID) {
     EFI_STATUS Status;
     Status = gBS->LocateProtocol(&gEfiSimplePointerProtocolGuid, NULL, (VOID**)&SimplePointer);
 }
-// hows my code? ehehe
 VOID EFIAPI GetMouseState(struct MouseState* state) {
     if (!SimplePointer || !state) return;
 

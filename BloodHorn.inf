@@ -10,7 +10,6 @@
 
 [Sources]
   main.c
-  main_coreboot.c
   net/arp.c
   net/dhcp.c
   net/net_utils.c
@@ -44,7 +43,6 @@
   config/config_ini.c
   config/config_json.c
   config/config_env.c
-  BloodHorn.c
   coreboot/coreboot_platform.c
   coreboot/coreboot_payload.c
 
