@@ -4,6 +4,18 @@
   <img src="Zeak.png" alt="BloodHorn Logo" width="500"/>
 </p>
 
+<div align="center">
+  <img src="winerr.png" alt=":(" width="22" style="vertical-align:middle; margin-right:6px;"/>
+  <strong>Temporary Discontinued Notice</strong>
+</div>
+
+<p align="center">
+  This project is <strong>temporarily discontinued</strong> until <strong>January 1, 2026</strong> due to mental health reasons affecting the main maintainer.
+  During this period, <strong>no new commits</strong> will be pushed, <strong>pull requests will not be reviewed or merged</strong>,
+  and <strong>issues will not be triaged</strong>.
+  Thank you for your understanding and patience.
+</p>
+
 ## Support Me
 
 If you like this project and want to support me, you can donate through [Liberapay](https://liberapay.com/Listedroot/donate).
