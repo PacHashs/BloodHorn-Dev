@@ -1,7 +1,7 @@
 # BloodHorn
 
 <p align="center">
-  <img src="Zeak.png" alt="BloodHorn Logo" width="500"/>
+  <img src="Z.png" alt="BloodHorn Logo" width="500"/>
 </p>
 
 <div align="center">
