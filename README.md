@@ -3,7 +3,7 @@
 <p align="center">
   <img src="Z.png" alt="BloodHorn Logo" width="500"/>
   <br>
-  <em>"The bootloader that doesn't boot - it grants booting privileges"</em>
+  <em>"The bootloader that doesn't boot . it grants booting privileges"</em>
 </p>
 
 ## BloodHorn: The Bootloader That Doesn't Ask Stupid Questions
@@ -27,7 +27,7 @@ If you like this project and want to support me, you can donate through [Liberap
 - Git (for cloning repositories)
 - Python 3.7 or later (for build tools)
 - A C compiler (GCC on Linux/macOS, Visual Studio on Windows)
-- EDK2 (already included as a submodule)
+- EDK2 (EDK2 modules and packages that are needed are already included . )
 - A healthy sense of adventure (and definitely a backup of your boot partition)
 
 ### Setting Up the Build Environment
