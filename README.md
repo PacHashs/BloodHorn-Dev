@@ -3,12 +3,30 @@
 <p align="center">
   <img src="Z.png" alt="BloodHorn Logo" width="500"/>
   <br>
-  <em>"The bootloader that doesn't boot . it grants booting privileges"</em>
+  <em>Fast, secure, and reliable system bootstrapping</em>
 </p>
 
-## BloodHorn: The Bootloader That Doesn't Ask Stupid Questions
+## About BloodHorn
 
-BloodHorn is the Chuck Norris of bootloaders - it doesn't boot your system, it allows your system to boot. Built on EDK2 with Coreboot integration, it's like giving your boot process a double shot of espresso. While other bootloaders are still asking if you want to start in safe mode, BloodHorn has already booted your OS, made coffee, and is now judging your choice of Linux distribution.
+BloodHorn is a modern, high-performance bootloader built on the EDK2 framework with Coreboot integration. Designed for speed, security, and reliability, it provides a robust foundation for system initialization across multiple architectures.
+
+## Project History
+
+### Origins (2016)
+The BloodHorn project originated from an open-source bootloader prototype discovered in 2016. The initial codebase was developed by an anonymous contributor and shared on a technical forum in 4chan. The current maintainer recognized its potential and began maintaining and expanding the project.
+
+### Development Timeline
+- **2016-2018**: Core functionality refinement and initial testing
+- **2019-2021**: Major architectural improvements and feature additions
+- **2022-2023**: Codebase modernization and security enhancements
+- **2024-Present**: Active maintenance and community development
+
+### Project Philosophy
+BloodHorn is developed with a focus on:
+- Technical excellence
+- Minimal resource usage
+- Clean, maintainable code
+- Practical functionality over marketing
 
 ## Support Me
 
@@ -21,125 +39,95 @@ If you like this project and want to support me, you can donate through [Liberap
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-x86__64%20%7C%20ARM64%20%7C%20RISC--V%20%7C%20LoongArch-blue)](https://codeberg.org/PacHashs/BloodHorn)
 
-## Quick Start: The BloodHorn Experience
+## Getting Started
 
 ### Prerequisites
-- Git (for cloning repositories)
-- Python 3.7 or later (for build tools)
-- A C compiler (GCC on Linux/macOS, Visual Studio on Windows)
-- EDK2 (EDK2 modules and packages that are needed are already included . )
-- A healthy sense of adventure (and definitely a backup of your boot partition)
+- Git
+- Python 3.7 or later
+- C/C++ toolchain (GCC/Clang on Linux/macOS, MSVC on Windows)
+- EDK2 (pre-installed and configured)
 
-### Setting Up the Build Environment
+### Building from Source
 
 #### Linux/macOS
 ```bash
-# Clone the repository (if you haven't already)
 git clone --recursive https://codeberg.org/PacHashs/BloodHorn.git
 cd BloodHorn
-
-# Initialize the EDK2 environment
-. edk2/edksetup.sh
-
-# Build the BaseTools
-make -C edk2/BaseTools
 ```
 
 #### Windows
 ```cmd
-:: Clone the repository (if you haven't already)
 git clone --recursive https://codeberg.org/PacHashs/BloodHorn.git
 cd BloodHorn
-
-:: Set up the environment
-call edk2\edksetup.bat
-
-:: Build the BaseTools
-cd edk2\BaseTools
-nmake all
-cd ..\..
 ```
 
+### Installing BloodHorn
 ### Building BloodHorn
 
 #### Linux/macOS
 ```bash
-# For a release build
+# Release build
 build -p BloodHorn.dsc -b RELEASE -t GCC5 -a X64
 
-# For debugging
+# Debug build
 build -p BloodHorn.dsc -b DEBUG -t GCC5 -a X64
 ```
 
 #### Windows
 ```cmd
-:: For a release build
+:: Release build
 build -p BloodHorn.dsc -b RELEASE -t VS2019 -a X64
 
-:: For debugging
+:: Debug build
 build -p BloodHorn.dsc -b DEBUG -t VS2019 -a X64
 ```
 
-The built EFI file will be available at:
-```
-Build/BloodHorn/RELEASE_GCC5/X64/BloodHorn.efi  # On Linux/macOS
-Build/BloodHorn/RELEASE_VS2019/X64/BloodHorn.efi # On Windows with VS2019
-Build/BloodHorn/RELEASE_CLANG38/X64/BloodHorn.efi # With Clang
-```
+Output files:
+- `Build/BloodHorn/RELEASE_<TOOLCHAIN>/X64/BloodHorn.efi`
+- `Build/BloodHorn/DEBUG_<TOOLCHAIN>/X64/BloodHorn.efi`
 
-## Installation (The Point of No Return)
+## Installation
 
 ### Linux/macOS
 ```bash
-# Find your EFI partition (usually /boot/efi or /efi)
-mount | grep efi
-
-# Create a backup (because we're responsible adults)
-sudo cp /path/to/efi/EFI/BOOT/BOOTX64.EFI /path/to/efi/EFI/BOOT/BOOTX64.BAK
+# Mount EFI partition (if not already mounted)
+mount /dev/sdX1 /mnt/efi
 
 # Install BloodHorn
-sudo cp Build/BloodHorn/RELEASE_GCC5/X64/BloodHorn.efi /path/to/efi/EFI/BOOT/BOOTX64.EFI
+cp Build/BloodHorn/RELEASE_GCC5/X64/BloodHorn.efi /mnt/efi/EFI/BOOT/BOOTX64.EFI
 ```
 
-### Windows (Admin Command Prompt)
+### Windows (Admin)
 ```cmd
-:: Backup the existing bootloader
-copy C:\EFI\Microsoft\Boot\bootmgfw.efi C:\EFI\Microsoft\Boot\bootmgfw.BAK
-
-:: Install BloodHorn
+:: Install to default boot location
 copy Build\BloodHorn\RELEASE_VS2019\X64\BloodHorn.efi C:\EFI\Microsoft\Boot\bootmgfw.efi
 ```
 
-## Project Structure (Where the Magic Happens)
+> **Note:** Always back up your existing bootloader before installation.
+
+## Project Structure
 
 ```
 BloodHorn/
 ├── BloodHorn.dsc       # Main build configuration
 ├── BloodHorn.fdf       # FD image layout
-├── BloodHorn.inf       # Module information
+├── BloodHorn.inf       # Module definition
 ├── coreboot/           # Coreboot integration
-├── uefi/              # UEFI-specific code
-├── security/          # TPM, Secure Boot, and other fun stuff
+├── uefi/              # UEFI implementation
+├── security/          # TPM and security features
 ├── fs/                # Filesystem support
-├── net/               # Network booting (for when you're feeling brave)
-└── plugins/           # Because why not make it more complicated?
-
-# EDK2 Components We've Adopted
-├── MdeModulePkg/      # Core UEFI functionality
-├── CryptoPkg/         # For when you need to encrypt your bootloader's diary
-├── SecurityPkg/       # Because security is important (apparently)
-└── FatPkg/            # FAT filesystem support (for when you're feeling nostalgic)
+├── net/               # Network booting
+└── plugins/           # Extensible modules
 ```
 
-## Features That Make GRUB Look Like a Dial-Up Connection
+## Features
 
-- **Architectures**: x86_64, ARM64, RISC-V, LoongArch - Like a UN meeting, but for your computer's soul
-- **Protocols**: Linux, Multiboot 1/2, Limine, Chainload, PXE, BloodChain - More protocols than your ex has excuses
-- **Security**: Secure Boot, TPM 2.0, file verification - We've got more layers than an onion (and might make you cry less)
-- **Config**: INI/JSON/UEFI vars - Because one way to do things is boring, and three is a party
-- **UI**: Text/graphical with localization - Now with 100% fewer "grub>" prompts that make you question your life choices
-- **Firmware**: Coreboot + UEFI hybrid - Like peanut butter and chocolate, but for your firmware
-- **Boot Speed**: Faster than you can say "I'll just check Reddit while I wait"
+- **Architectures**: x86_64, ARM64, RISC-V, LoongArch
+- **Security**: Secure Boot, TPM 2.0, file verification
+- **Firmware**: Coreboot + UEFI hybrid
+- **Configuration**: INI/JSON/UEFI variables
+- **UI**: Text and graphical interfaces with localization
+- **Performance**: Optimized boot times
    ```
 
 4. **Basic Configuration**:
