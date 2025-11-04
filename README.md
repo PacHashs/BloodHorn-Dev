@@ -7,9 +7,10 @@
 </p>
 
 ![Code Quality](./quality_badge.svg)
-
+##### Note: this is a mirror of bloodhorn's main repo in codeberg . all updates will go to codeberg before this github mirror .
+- you can see the main codeberg repo at : https://codeberg.org/PacHashs/BloodHorn
+---
 ## About BloodHorn
-
 BloodHorn is a modern, high-performance bootloader built on the EDK2 framework with Coreboot integration. Designed for speed, security, and reliability, it provides a robust foundation for system initialization across multiple architectures.
 
 ## Important Safety Notice
